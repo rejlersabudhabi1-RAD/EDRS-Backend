@@ -1,0 +1,14 @@
+# Railway Minimal Configuration
+[build]
+builder = "nixpacks"
+
+[build.env]
+NIXPACKS_PYTHON_VERSION = "3.11"
+
+[deploy]
+healthcheckPath = "/health/"
+healthcheckTimeout = 60
+restartPolicyType = "always"
+
+[env]
+DJANGO_SETTINGS_MODULE = "rejlers_api.minimal_settings"

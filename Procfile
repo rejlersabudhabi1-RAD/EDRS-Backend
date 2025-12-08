@@ -1,0 +1,1 @@
+web: gunicorn rejlers_api.minimal_wsgi:application --bind 0.0.0.0:$PORT
