@@ -9,6 +9,7 @@ from pathlib import Path
 from decouple import config
 from datetime import timedelta
 import os
+import dj_database_url
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -80,22 +81,37 @@ TEMPLATES = [
 WSGI_APPLICATION = 'rejlers_api.wsgi.application'
 
 
-# Database
+# Database Configuration with Soft Coding
 # https://docs.djangoproject.com/en/5.0/ref/settings/#databases
 
-DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.postgresql',
-        'NAME': 'railway',
-        'USER': 'postgres',
-        'PASSWORD': 'OtUKsnrCAhrRCCFbAjKLWVnilkdsUhHR',
-        'HOST': 'ballast.proxy.rlwy.net',
-        'PORT': '49545',
-        'OPTIONS': {
-            'sslmode': 'require',
-        },
+# Primary database configuration using DATABASE_URL (Railway standard)
+DATABASE_URL = config('DATABASE_URL', default=None)
+
+if DATABASE_URL:
+    # Production/Railway: Use DATABASE_URL (automatically provided by Railway)
+    DATABASES = {
+        'default': dj_database_url.parse(DATABASE_URL, conn_max_age=600)
     }
-}
+else:
+    # Development/Manual configuration: Use individual environment variables
+    DATABASES = {
+        'default': {
+            'ENGINE': config('DB_ENGINE', default='django.db.backends.postgresql'),
+            'NAME': config('DB_NAME', default='railway'),
+            'USER': config('DB_USER', default='postgres'),
+            'PASSWORD': config('DB_PASSWORD', default=''),
+            'HOST': config('DB_HOST', default='localhost'),
+            'PORT': config('DB_PORT', default='5432'),
+            'OPTIONS': {
+                'sslmode': config('DB_SSL_MODE', default='require'),
+            },
+            'CONN_MAX_AGE': config('DB_CONN_MAX_AGE', default=600, cast=int),
+        }
+    }
+
+# Additional database settings
+DATABASES['default']['ATOMIC_REQUESTS'] = config('DB_ATOMIC_REQUESTS', default=True, cast=bool)
+DATABASES['default']['AUTOCOMMIT'] = config('DB_AUTOCOMMIT', default=True, cast=bool)
 
 
 # Password validation
