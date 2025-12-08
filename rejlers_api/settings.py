@@ -102,12 +102,15 @@ else:
             'PASSWORD': config('DB_PASSWORD', default=''),
             'HOST': config('DB_HOST', default='localhost'),
             'PORT': config('DB_PORT', default='5432'),
-            'OPTIONS': {
-                'sslmode': config('DB_SSL_MODE', default='require'),
-            },
             'CONN_MAX_AGE': config('DB_CONN_MAX_AGE', default=600, cast=int),
         }
     }
+
+    # Add SSL options only for PostgreSQL
+    if DATABASES['default']['ENGINE'] == 'django.db.backends.postgresql':
+        DATABASES['default']['OPTIONS'] = {
+            'sslmode': config('DB_SSL_MODE', default='require'),
+        }
 
 # Additional database settings
 DATABASES['default']['ATOMIC_REQUESTS'] = config('DB_ATOMIC_REQUESTS', default=True, cast=bool)
@@ -250,12 +253,12 @@ LOGGING = {
     },
 }
 
-# AI Configuration
-OPENAI_API_KEY = config('OPENAI_API_KEY')
-OPENAI_MODEL = 'gpt-4o-mini'
-OPENAI_VISION_MODEL = 'gpt-4o-mini'
-OPENAI_MAX_TOKENS = 4000
-OPENAI_TEMPERATURE = 0.7
+# AI Configuration (Optional for local development)
+OPENAI_API_KEY = config('OPENAI_API_KEY', default='')
+OPENAI_MODEL = config('OPENAI_MODEL', default='gpt-4o-mini')
+OPENAI_VISION_MODEL = config('OPENAI_VISION_MODEL', default='gpt-4o-mini')
+OPENAI_MAX_TOKENS = config('OPENAI_MAX_TOKENS', default=4000, cast=int)
+OPENAI_TEMPERATURE = config('OPENAI_TEMPERATURE', default=0.7, cast=float)
 
 # AI ERP Configuration
 AI_ERP_DRAWING_ANALYSIS = {
@@ -311,9 +314,9 @@ RBAC_ROLES = {
 # AWS CONFIGURATION
 # =============================================================================
 
-# AWS Credentials and Region
-AWS_ACCESS_KEY_ID = config('AWS_ACCESS_KEY_ID')
-AWS_SECRET_ACCESS_KEY = config('AWS_SECRET_ACCESS_KEY')
+# AWS Credentials and Region (Optional for local development)
+AWS_ACCESS_KEY_ID = config('AWS_ACCESS_KEY_ID', default='')
+AWS_SECRET_ACCESS_KEY = config('AWS_SECRET_ACCESS_KEY', default='')
 AWS_DEFAULT_REGION = config('AWS_DEFAULT_REGION', default='eu-north-1')
 AWS_S3_REGION_NAME = config('AWS_S3_REGION_NAME', default='eu-north-1')
 
@@ -342,10 +345,10 @@ if not DEBUG:
 # EMAIL CONFIGURATION (AWS SES)
 # =============================================================================
 
-# AWS SES Configuration
+# AWS SES Configuration (Optional for local development)
 AWS_SES_REGION_NAME = config('AWS_SES_REGION_NAME', default='eu-north-1')
-AWS_SES_ACCESS_KEY_ID = config('AWS_SES_ACCESS_KEY_ID')
-AWS_SES_SECRET_ACCESS_KEY = config('AWS_SES_SECRET_ACCESS_KEY')
+AWS_SES_ACCESS_KEY_ID = config('AWS_SES_ACCESS_KEY_ID', default='')
+AWS_SES_SECRET_ACCESS_KEY = config('AWS_SES_SECRET_ACCESS_KEY', default='')
 
 # Email Backend Configuration
 EMAIL_BACKEND = config('EMAIL_BACKEND', default='django.core.mail.backends.smtp.EmailBackend')
