@@ -1,4 +1,4 @@
-# Railway Minimal Configuration
+# Railway Configuration for Django Backend
 [build]
 builder = "nixpacks"
 
@@ -7,9 +7,11 @@ NIXPACKS_PYTHON_VERSION = "3.11"
 
 [deploy]
 healthcheckPath = "/health/"
-healthcheckTimeout = 60
-restartPolicyType = "always"
-startCommand = "python manage.py migrate --noinput && gunicorn rejlers_api.wsgi:application --bind 0.0.0.0:$PORT --workers 4 --timeout 120"
+healthcheckTimeout = 120
+restartPolicyType = "on-failure"
+restartPolicyMaxRetries = 3
 
 [env]
 DJANGO_SETTINGS_MODULE = "rejlers_api.settings"
+PYTHONUNBUFFERED = "1"
+RAILWAY_ENVIRONMENT = "production"

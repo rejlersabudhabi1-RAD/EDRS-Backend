@@ -18,17 +18,24 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 SECRET_KEY = config('SECRET_KEY', default='django-insecure-change-me')
 DEBUG = config('DEBUG', default=True, cast=bool)
 
-# ALLOWED_HOSTS with Railway support
-ALLOWED_HOSTS = config('ALLOWED_HOSTS', default='localhost,127.0.0.1').split(',')
+# ALLOWED_HOSTS with Railway support - Always permissive for Railway
+ALLOWED_HOSTS_CONFIG = config('ALLOWED_HOSTS', default='')
 
-# Add Railway-specific hosts
-if not DEBUG:
-    ALLOWED_HOSTS.extend([
-        '.railway.app',
-        '.up.railway.app',
-        '*.railway.app',
-        '*.up.railway.app',
-    ])
+if ALLOWED_HOSTS_CONFIG:
+    ALLOWED_HOSTS = [h.strip() for h in ALLOWED_HOSTS_CONFIG.split(',') if h.strip()]
+else:
+    ALLOWED_HOSTS = ['localhost', '127.0.0.1']
+
+# Always add Railway domains (for production deployment)
+ALLOWED_HOSTS.extend([
+    '.railway.app',
+    '.up.railway.app',
+    'web-production-19d43.up.railway.app',  # Your specific Railway domain
+])
+
+# Add wildcard for Railway (handles all subdomains)
+if not DEBUG or config('RAILWAY_ENVIRONMENT', default='') == 'production':
+    ALLOWED_HOSTS.append('*')  # Allow all hosts on Railway for initial deployment
     
 # Add custom domains
 FRONTEND_URL = config('FRONTEND_URL', default='http://localhost:3000')
@@ -107,34 +114,51 @@ WSGI_APPLICATION = 'rejlers_api.wsgi.application'
 # Primary database configuration using DATABASE_URL (Railway standard)
 DATABASE_URL = config('DATABASE_URL', default=None)
 
-if DATABASE_URL:
-    # Production/Railway: Use DATABASE_URL (automatically provided by Railway)
-    DATABASES = {
-        'default': dj_database_url.parse(DATABASE_URL, conn_max_age=600)
-    }
-else:
-    # Development/Manual configuration: Use individual environment variables
+try:
+    if DATABASE_URL:
+        # Production/Railway: Use DATABASE_URL (automatically provided by Railway)
+        DATABASES = {
+            'default': dj_database_url.parse(
+                DATABASE_URL, 
+                conn_max_age=600,
+                conn_health_checks=True
+            )
+        }
+    else:
+        # Development/Manual configuration: Use individual environment variables
+        DATABASES = {
+            'default': {
+                'ENGINE': config('DB_ENGINE', default='django.db.backends.postgresql'),
+                'NAME': config('DB_NAME', default='railway'),
+                'USER': config('DB_USER', default='postgres'),
+                'PASSWORD': config('DB_PASSWORD', default=''),
+                'HOST': config('DB_HOST', default='localhost'),
+                'PORT': config('DB_PORT', default='5432', cast=int),
+                'CONN_MAX_AGE': config('DB_CONN_MAX_AGE', default=600, cast=int),
+            }
+        }
+
+        # Add SSL options only for PostgreSQL
+        if DATABASES['default']['ENGINE'] == 'django.db.backends.postgresql':
+            DATABASES['default']['OPTIONS'] = {
+                'sslmode': config('DB_SSL_MODE', default='prefer'),
+                'connect_timeout': 10,
+            }
+
+    # Additional database settings
+    DATABASES['default']['ATOMIC_REQUESTS'] = config('DB_ATOMIC_REQUESTS', default=True, cast=bool)
+    DATABASES['default']['AUTOCOMMIT'] = config('DB_AUTOCOMMIT', default=True, cast=bool)
+    
+except Exception as e:
+    # Fallback configuration if database parsing fails
+    import sys
+    print(f"WARNING: Database configuration error: {e}", file=sys.stderr)
     DATABASES = {
         'default': {
-            'ENGINE': config('DB_ENGINE', default='django.db.backends.postgresql'),
-            'NAME': config('DB_NAME', default='railway'),
-            'USER': config('DB_USER', default='postgres'),
-            'PASSWORD': config('DB_PASSWORD', default=''),
-            'HOST': config('DB_HOST', default='localhost'),
-            'PORT': config('DB_PORT', default='5432'),
-            'CONN_MAX_AGE': config('DB_CONN_MAX_AGE', default=600, cast=int),
+            'ENGINE': 'django.db.backends.sqlite3',
+            'NAME': BASE_DIR / 'db.sqlite3',
         }
     }
-
-    # Add SSL options only for PostgreSQL
-    if DATABASES['default']['ENGINE'] == 'django.db.backends.postgresql':
-        DATABASES['default']['OPTIONS'] = {
-            'sslmode': config('DB_SSL_MODE', default='require'),
-        }
-
-# Additional database settings
-DATABASES['default']['ATOMIC_REQUESTS'] = config('DB_ATOMIC_REQUESTS', default=True, cast=bool)
-DATABASES['default']['AUTOCOMMIT'] = config('DB_AUTOCOMMIT', default=True, cast=bool)
 
 
 # Password validation
