@@ -9,6 +9,7 @@ NIXPACKS_PYTHON_VERSION = "3.11"
 healthcheckPath = "/health/"
 healthcheckTimeout = 60
 restartPolicyType = "always"
+startCommand = "python manage.py migrate --noinput && gunicorn rejlers_api.wsgi:application --bind 0.0.0.0:$PORT --workers 4 --timeout 120"
 
 [env]
 DJANGO_SETTINGS_MODULE = "rejlers_api.settings"
