@@ -82,27 +82,45 @@ class PIDAnalyzer:
             }
     
     async def _extract_content(self, file_data: bytes, file_type: str) -> Dict[str, Any]:
-        """Extract text and/or image content from document"""
+        """Extract text and/or image content from document with enhanced metadata"""
         content = {
             'text': '',
             'images': [],
-            'has_visual_content': False
+            'has_visual_content': False,
+            'page_count': 0,
+            'extracted_tags': [],
+            'extracted_values': []
         }
         
         try:
             if file_type.lower() == 'pdf':
-                # Extract text from PDF
+                # Extract text from PDF with enhanced parsing
                 pdf_reader = PyPDF2.PdfReader(io.BytesIO(file_data))
+                content['page_count'] = len(pdf_reader.pages)
                 text_content = []
+                
                 for page in pdf_reader.pages:
-                    text_content.append(page.extract_text())
+                    page_text = page.extract_text()
+                    text_content.append(page_text)
+                    
+                    # Extract tag numbers (format: XXX-123, P-001, V-234, etc.)
+                    import re
+                    tags = re.findall(r'\b[A-Z]{1,3}-\d{3,4}[A-Z]?\b', page_text)
+                    content['extracted_tags'].extend(tags)
+                    
+                    # Extract numerical values with units
+                    values = re.findall(r'\d+\.?\d*\s*(?:bar|psi|°C|°F|kg/h|m³/h|mm|inch)', page_text)
+                    content['extracted_values'].extend(values)
+                
                 content['text'] = '\n\n'.join(text_content)
+                content['extracted_tags'] = list(set(content['extracted_tags']))[:50]  # Unique, limit 50
+                content['extracted_values'] = list(set(content['extracted_values']))[:30]
                 
                 # Convert first page to image for visual analysis
                 content['has_visual_content'] = True
                 content['images'].append({
-                    'description': 'PDF diagram',
-                    'base64': base64.b64encode(file_data[:50000]).decode('utf-8')  # Limit size
+                    'description': 'PDF P&ID diagram',
+                    'base64': base64.b64encode(file_data[:100000]).decode('utf-8')  # Increased limit
                 })
                 
             elif file_type.lower() in ['png', 'jpg', 'jpeg', 'gif', 'bmp']:
@@ -125,102 +143,184 @@ class PIDAnalyzer:
         return content
     
     async def _analyze_components(self, content: Dict[str, Any]) -> Dict[str, Any]:
-        """Analyze P&ID components using GPT-4"""
+        """Analyze P&ID components using GPT-4 with enhanced prompts"""
         if not self.client:
             return self._mock_component_analysis()
         
         try:
+            # Extract detected tags and values for context
+            tags_context = f"Detected Tags: {', '.join(content.get('extracted_tags', [])[:20])}" if content.get('extracted_tags') else ""
+            values_context = f"Process Values: {', '.join(content.get('extracted_values', [])[:15])}" if content.get('extracted_values') else ""
+            
             prompt = f"""
-            Analyze the following P&ID (Piping & Instrumentation Diagram) content and identify:
+            You are analyzing a P&ID (Piping & Instrumentation Diagram) for an Oil & Gas facility.
             
-            1. Equipment Components (vessels, pumps, compressors, heat exchangers, etc.)
-            2. Instrumentation (sensors, transmitters, controllers, valves)
-            3. Piping Systems (material, size, connections)
-            4. Control Systems (automation, interlocks, safety systems)
-            5. Utility Systems (steam, water, air, nitrogen, etc.)
+            DETECTED INFORMATION:
+            {tags_context}
+            {values_context}
+            Pages: {content.get('page_count', 'N/A')}
             
-            Content:
-            {content.get('text', 'Visual diagram - analysis based on image')}
+            DOCUMENT TEXT:
+            {content.get('text', 'Visual diagram - analysis based on image')[:3000]}
             
-            Provide detailed component inventory with:
-            - Component ID/Tag numbers
-            - Type and function
-            - Critical parameters
-            - Safety classifications
+            REQUIRED ANALYSIS:
             
-            Format as structured JSON.
+            1. EQUIPMENT INVENTORY:
+               - Vessels (separators, drums, tanks, reactors)
+               - Rotating equipment (pumps, compressors, turbines)
+               - Heat exchangers (shell & tube, air coolers, heaters)
+               - Filters and strainers
+               - For each: TAG number, Type, Capacity/Rating, Material, Criticality
+            
+            2. INSTRUMENTATION:
+               - Flow transmitters (FT, FIC, FCV)
+               - Pressure instruments (PT, PIC, PSV, PRV)
+               - Temperature instruments (TE, TT, TIC)
+               - Level instruments (LT, LIC, LSH, LSL)
+               - Control valves and on/off valves
+               - For each: TAG, Service, Set points, Control logic
+            
+            3. PIPING SYSTEMS:
+               - Line numbers and sizes
+               - Piping classes and materials
+               - Design pressure and temperature
+               - Fluid services (process, utility, safety)
+            
+            4. SAFETY SYSTEMS:
+               - Pressure relief devices (PSV, RO, rupture discs)
+               - Emergency shutdown (ESD) valves
+               - Fire & gas detection
+               - Safety interlocks
+            
+            5. PROCESS FLOW:
+               - Main process streams
+               - Material balance (if available)
+               - Operating conditions
+               - Critical control loops
+            
+            Return in JSON format with detailed arrays for each category.
+            Include confidence scores for each identification.
             """
             
             response = self.client.chat.completions.create(
                 model=self.model,
                 messages=[
-                    {"role": "system", "content": "You are an expert Oil & Gas engineer specializing in P&ID analysis and process engineering."},
+                    {"role": "system", "content": "You are a senior P&ID reviewer with 20+ years experience in upstream Oil & Gas engineering. You specialize in detailed equipment identification, process safety analysis, and standards compliance (API 14C, ASME B31.3, ISO 10423)."},
                     {"role": "user", "content": prompt}
                 ],
-                temperature=0.3,
-                max_tokens=2000
+                temperature=0.2,
+                max_tokens=3500
             )
             
             analysis_text = response.choices[0].message.content
             
-            return {
-                'status': 'success',
-                'components_identified': analysis_text,
-                'confidence_score': 0.85,
-                'method': 'GPT-4 Analysis'
-            }
+            # Try to parse JSON response
+            import json
+            try:
+                parsed_analysis = json.loads(analysis_text.strip().replace('```json', '').replace('```', ''))
+                return {
+                    'status': 'success',
+                    'components_detailed': parsed_analysis,
+                    'raw_analysis': analysis_text,
+                    'tags_found': content.get('extracted_tags', []),
+                    'values_found': content.get('extracted_values', []),
+                    'confidence_score': 0.88,
+                    'method': 'GPT-4-turbo Enhanced Analysis'
+                }
+            except:
+                return {
+                    'status': 'success',
+                    'components_identified': analysis_text,
+                    'tags_found': content.get('extracted_tags', []),
+                    'values_found': content.get('extracted_values', []),
+                    'confidence_score': 0.85,
+                    'method': 'GPT-4-turbo Analysis'
+                }
             
         except Exception as e:
             logger.error(f"Component analysis error: {str(e)}")
             return {'error': str(e), 'status': 'failed'}
     
     async def _check_compliance(self, content: Dict[str, Any]) -> Dict[str, Any]:
-        """Check compliance with industry standards (API, ASME, ISO, NORSOK)"""
+        """Check compliance with industry standards with detailed analysis"""
         if not self.client:
             return self._mock_compliance_check()
         
         try:
             prompt = f"""
-            Review this P&ID for compliance with Oil & Gas industry standards:
+            Perform a comprehensive compliance review of this P&ID against international Oil & Gas standards.
             
-            Standards to check:
-            - API 14C (Safety Systems)
-            - ASME B31.3 (Process Piping)
-            - ISO 10423 (Wellhead Equipment)
-            - NORSOK S-001 (Technical Safety)
-            - IEC 61511 (Safety Instrumented Systems)
+            STANDARDS FOR COMPLIANCE CHECK:
             
-            Content:
-            {content.get('text', 'Visual diagram provided')}
+            1. API 14C (Surface Safety Systems for Offshore Production)
+               - Check: Safety shutdown systems, ESD valves, fire & gas detection
+               
+            2. ASME B31.3 (Process Piping)
+               - Check: Piping design, pressure ratings, material specifications, valve locations
+               
+            3. ISO 10423 (Petroleum and Natural Gas Industries - Drilling and Production Equipment)
+               - Check: Wellhead equipment, pressure control, safety barriers
+               
+            4. NORSOK S-001 (Technical Safety)
+               - Check: Safety functions, barrier philosophy, risk mitigation
+               
+            5. IEC 61511 (Functional Safety - Safety Instrumented Systems)
+               - Check: SIS logic, SIL requirements, independence, redundancy
             
-            Identify:
-            1. Compliant elements
-            2. Non-compliant or questionable items
-            3. Missing safety features
-            4. Required improvements
+            DOCUMENT CONTENT:
+            {content.get('text', 'Visual diagram provided')[:2500]}
             
-            Provide severity ratings: CRITICAL, HIGH, MEDIUM, LOW
+            Tags: {', '.join(content.get('extracted_tags', [])[:15])}
+            
+            FOR EACH STANDARD, PROVIDE:
+            1. Compliance Status (Compliant / Partial / Non-Compliant / Not Applicable)
+            2. Specific findings (what's good, what's missing)
+            3. Critical gaps or violations
+            4. Recommendations for improvement
+            5. Severity (CRITICAL/HIGH/MEDIUM/LOW)
+            
+            SPECIAL ATTENTION TO:
+            - Pressure relief sizing and location
+            - Emergency shutdown (ESD) valve placement
+            - Safety instrumented functions (SIF)
+            - Bleed and drain provisions
+            - Fire protection systems
+            - Isolation philosophy
+            - Redundancy in critical systems
+            
+            Return structured JSON with compliance matrix.
             """
             
             response = self.client.chat.completions.create(
                 model=self.model,
                 messages=[
-                    {"role": "system", "content": "You are a compliance expert for Oil & Gas engineering standards."},
+                    {"role": "system", "content": "You are a certified compliance auditor and lead engineer specializing in API, ASME, ISO, NORSOK, and IEC standards for upstream Oil & Gas facilities. You conduct detailed P&ID reviews for major operators."},
                     {"role": "user", "content": prompt}
                 ],
-                temperature=0.2,
-                max_tokens=2000
+                temperature=0.1,
+                max_tokens=3000
             )
             
             compliance_result = response.choices[0].message.content
             
-            return {
-                'status': 'compliant_with_findings',
-                'standards_checked': ['API 14C', 'ASME B31.3', 'ISO 10423', 'NORSOK S-001', 'IEC 61511'],
-                'findings': compliance_result,
-                'overall_score': 85,
-                'method': 'AI-Powered Standards Review'
-            }
+            # Try to parse JSON
+            import json
+            try:
+                parsed_compliance = json.loads(compliance_result.strip().replace('```json', '').replace('```', ''))
+                return {
+                    'status': 'review_completed',
+                    'standards_checked': ['API 14C', 'ASME B31.3', 'ISO 10423', 'NORSOK S-001', 'IEC 61511'],
+                    'detailed_findings': parsed_compliance,
+                    'raw_report': compliance_result,
+                    'method': 'AI-Powered Detailed Standards Review'
+                }
+            except:
+                return {
+                    'status': 'review_completed',
+                    'standards_checked': ['API 14C', 'ASME B31.3', 'ISO 10423', 'NORSOK S-001', 'IEC 61511'],
+                    'findings': compliance_result,
+                    'method': 'AI-Powered Standards Review'
+                }
             
         except Exception as e:
             logger.error(f"Compliance check error: {str(e)}")

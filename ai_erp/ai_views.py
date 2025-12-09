@@ -6,6 +6,7 @@ Provides REST endpoints for AI-powered document processing, validation, and conv
 import asyncio
 import json
 import logging
+import io
 from typing import Dict, Any
 from datetime import datetime
 import base64
@@ -447,8 +448,25 @@ class DocumentUploadWithReportAPI(APIView, AIServiceMixin):
             asyncio.set_event_loop(loop)
             
             try:
-                # Detect if this is a P&ID document
+                # Enhanced P&ID detection - check filename AND content
                 is_pid_document = any(keyword in filename.lower() for keyword in ['pid', 'p&id', 'p-id', 'piping', 'instrumentation'])
+                
+                # Content-based detection for PDFs
+                if not is_pid_document and file_type == 'pdf':
+                    try:
+                        import PyPDF2
+                        pdf_reader = PyPDF2.PdfReader(io.BytesIO(file_data))
+                        text_sample = ''
+                        for page in pdf_reader.pages[:3]:  # Check first 3 pages
+                            text_sample += page.extract_text().lower()
+                        # Check for P&ID indicators in content
+                        pid_indicators = ['piping', 'instrumentation', 'valve', 'pump', 'flow diagram', 
+                                        'process flow', 'tag number', 'equipment', 'vessel', 'heat exchanger']
+                        if sum(indicator in text_sample for indicator in pid_indicators) >= 3:
+                            is_pid_document = True
+                            logger.info(f"P&ID detected via content analysis for {filename}")
+                    except Exception as e:
+                        logger.warning(f"Content detection failed: {e}")
                 
                 if is_pid_document:
                     # Use advanced P&ID analyzer for P&ID documents
