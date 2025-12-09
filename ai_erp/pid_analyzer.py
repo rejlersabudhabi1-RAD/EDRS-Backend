@@ -11,8 +11,17 @@ from openai import OpenAI
 from decouple import config
 from PIL import Image
 import PyPDF2
+from .token_optimizer import TOKEN_LIMITS, TEMPERATURE_SETTINGS, MODEL_SETTINGS, OPTIMIZATION_FLAGS
 
 logger = logging.getLogger(__name__)
+
+def _truncate_content(content: str, max_length: int = 15000) -> str:
+    """Smart content truncation to save tokens"""
+    if len(content) <= max_length:
+        return content
+    # Keep beginning and end, truncate middle
+    keep_chars = max_length // 2
+    return content[:keep_chars] + "\n... [content truncated to save tokens] ...\n" + content[-keep_chars:]
 
 
 class PIDAnalyzer:
@@ -202,14 +211,17 @@ class PIDAnalyzer:
             Include confidence scores for each identification.
             """
             
+            # TOKEN OPTIMIZATION: Truncate content + reduce tokens by 57%
+            truncated_prompt = _truncate_content(prompt, OPTIMIZATION_FLAGS['max_content_length'])
+            
             response = self.client.chat.completions.create(
-                model=self.model,
+                model=MODEL_SETTINGS['primary'],
                 messages=[
                     {"role": "system", "content": "You are a senior P&ID reviewer with 20+ years experience in upstream Oil & Gas engineering. You specialize in detailed equipment identification, process safety analysis, and standards compliance (API 14C, ASME B31.3, ISO 10423)."},
-                    {"role": "user", "content": prompt}
+                    {"role": "user", "content": truncated_prompt}
                 ],
-                temperature=0.2,
-                max_tokens=3500
+                temperature=TEMPERATURE_SETTINGS['component_analysis'],
+                max_tokens=TOKEN_LIMITS['component_analysis']  # 1500 (was 3500)
             )
             
             analysis_text = response.choices[0].message.content
@@ -291,14 +303,17 @@ class PIDAnalyzer:
             Return structured JSON with compliance matrix.
             """
             
+            # TOKEN OPTIMIZATION: Truncate + reduce tokens by 60%
+            truncated_prompt = _truncate_content(prompt, OPTIMIZATION_FLAGS['max_content_length'])
+            
             response = self.client.chat.completions.create(
-                model=self.model,
+                model=MODEL_SETTINGS['primary'],
                 messages=[
                     {"role": "system", "content": "You are a certified compliance auditor and lead engineer specializing in API, ASME, ISO, NORSOK, and IEC standards for upstream Oil & Gas facilities. You conduct detailed P&ID reviews for major operators."},
-                    {"role": "user", "content": prompt}
+                    {"role": "user", "content": truncated_prompt}
                 ],
-                temperature=0.1,
-                max_tokens=3000
+                temperature=TEMPERATURE_SETTINGS['compliance_check'],
+                max_tokens=TOKEN_LIMITS['compliance_check']  # 1200 (was 3000)
             )
             
             compliance_result = response.choices[0].message.content
@@ -354,14 +369,17 @@ class PIDAnalyzer:
             Focus on critical safety systems and process hazards.
             """
             
+            # Truncate content to save tokens
+            truncated_prompt = _truncate_content(prompt, OPTIMIZATION_FLAGS['max_content_length'])
+            
             response = self.client.chat.completions.create(
-                model=self.model,
+                model=MODEL_SETTINGS['primary'],
                 messages=[
-                    {"role": "system", "content": "You are a process safety expert with HAZOP and risk assessment expertise."},
-                    {"role": "user", "content": prompt}
+                    {"role": "system", "content": "You are an oil & gas process safety expert specializing in HAZOP, risk analysis, and safety systems."},
+                    {"role": "user", "content": truncated_prompt}
                 ],
-                temperature=0.3,
-                max_tokens=2000
+                temperature=TEMPERATURE_SETTINGS['risk_assessment'],
+                max_tokens=TOKEN_LIMITS['risk_assessment']
             )
             
             risk_analysis = response.choices[0].message.content
@@ -401,14 +419,20 @@ class PIDAnalyzer:
             Format: Priority (High/Medium/Low), Category, Description, Expected Benefit
             """
             
+            # Truncate content to save tokens
+            truncated_prompt = _truncate_content(prompt, OPTIMIZATION_FLAGS['max_content_length'])
+            
+            # Use cheaper model for recommendations if enabled
+            model = MODEL_SETTINGS['fallback'] if OPTIMIZATION_FLAGS.get('use_mini_for_recommendations', False) else MODEL_SETTINGS['primary']
+            
             response = self.client.chat.completions.create(
-                model=self.model,
+                model=model,
                 messages=[
-                    {"role": "system", "content": "You are a senior process engineer providing practical recommendations."},
-                    {"role": "user", "content": prompt}
+                    {"role": "system", "content": "You are an expert engineering consultant providing actionable recommendations."},
+                    {"role": "user", "content": truncated_prompt}
                 ],
-                temperature=0.4,
-                max_tokens=1500
+                temperature=TEMPERATURE_SETTINGS['recommendations'],
+                max_tokens=TOKEN_LIMITS['recommendations']
             )
             
             recommendations_text = response.choices[0].message.content
@@ -449,14 +473,17 @@ class PIDAnalyzer:
             Provide in structured format with units.
             """
             
+            # Truncate content to save tokens
+            truncated_prompt = _truncate_content(prompt, OPTIMIZATION_FLAGS['max_content_length'])
+            
             response = self.client.chat.completions.create(
-                model=self.model,
+                model=MODEL_SETTINGS['primary'],
                 messages=[
-                    {"role": "system", "content": "You are a technical documentation expert."},
-                    {"role": "user", "content": prompt}
+                    {"role": "system", "content": "You are a technical documentation specialist."},
+                    {"role": "user", "content": truncated_prompt}
                 ],
-                temperature=0.2,
-                max_tokens=1500
+                temperature=TEMPERATURE_SETTINGS['technical_details'],
+                max_tokens=TOKEN_LIMITS['technical_details']  # 800 (was 1500)
             )
             
             technical_data = response.choices[0].message.content
@@ -492,14 +519,20 @@ class PIDAnalyzer:
             Write for technical management audience.
             """
             
+            # Truncate content to save tokens
+            truncated_prompt = _truncate_content(prompt, OPTIMIZATION_FLAGS['max_content_length'])
+            
+            # Use much cheaper gpt-4o-mini for executive summaries (80% cost reduction)
+            model = MODEL_SETTINGS['fallback'] if OPTIMIZATION_FLAGS.get('use_mini_for_summary', True) else MODEL_SETTINGS['primary']
+            
             response = self.client.chat.completions.create(
-                model=self.model,
+                model=model,
                 messages=[
-                    {"role": "system", "content": "You are a technical report writer for executive audiences."},
-                    {"role": "user", "content": prompt}
+                    {"role": "system", "content": "You are an executive summary specialist."},
+                    {"role": "user", "content": truncated_prompt}
                 ],
-                temperature=0.4,
-                max_tokens=800
+                temperature=TEMPERATURE_SETTINGS['summary'],
+                max_tokens=TOKEN_LIMITS['summary']
             )
             
             return response.choices[0].message.content
