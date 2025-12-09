@@ -2,15 +2,7 @@
 [build]
 builder = "nixpacks"
 
-[build.env]
-NIXPACKS_PYTHON_VERSION = "3.11"
-
 [deploy]
 healthcheckPath = "/health/"
-healthcheckTimeout = 120
+healthcheckTimeout = 100
 restartPolicyType = "always"
-
-[env]
-DJANGO_SETTINGS_MODULE = "rejlers_api.settings"
-PYTHONUNBUFFERED = "1"
-RAILWAY_ENVIRONMENT = "production"
