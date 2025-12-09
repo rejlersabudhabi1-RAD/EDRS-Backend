@@ -1,1 +1,1 @@
-web: gunicorn rejlers_api.minimal_wsgi:application --bind 0.0.0.0:$PORT
+web: gunicorn rejlers_api.wsgi:application --bind 0.0.0.0:$PORT --workers 4 --timeout 120

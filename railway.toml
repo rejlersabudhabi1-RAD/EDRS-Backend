@@ -11,4 +11,4 @@ healthcheckTimeout = 60
 restartPolicyType = "always"
 
 [env]
-DJANGO_SETTINGS_MODULE = "rejlers_api.minimal_settings"
+DJANGO_SETTINGS_MODULE = "rejlers_api.settings"
