@@ -17,7 +17,7 @@ from django.views import View
 from rest_framework import status
 from rest_framework.response import Response
 from rest_framework.views import APIView
-from rest_framework.permissions import IsAuthenticated
+from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework.parsers import MultiPartParser, FileUploadParser
 import time
 
@@ -394,7 +394,7 @@ class DocumentUploadWithReportAPI(APIView, AIServiceMixin):
     Combines upload, classification, and report generation in one endpoint
     """
     
-    permission_classes = [IsAuthenticated]
+    permission_classes = [AllowAny]  # Allow anonymous access for document upload
     parser_classes = [MultiPartParser, FileUploadParser]
     
     def post(self, request):
