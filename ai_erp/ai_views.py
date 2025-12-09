@@ -7,6 +7,8 @@ import asyncio
 import json
 import logging
 from typing import Dict, Any
+from datetime import datetime
+import base64
 from django.http import JsonResponse, HttpRequest
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
@@ -21,6 +23,7 @@ import time
 
 from .ai_services import get_ai_drawing_analyzer, get_document_classifier, get_document_validator
 from .document_report_service import get_report_generator
+from .pid_analyzer import get_pid_analyzer
 
 logger = logging.getLogger(__name__)
 
@@ -434,13 +437,28 @@ class DocumentUploadWithReportAPI(APIView, AIServiceMixin):
                 'uploaded_by': request.user.username if request.user.is_authenticated else 'Anonymous'
             }
             
-            # Perform AI analysis
+            # Perform AI analysis with enhanced P&ID support
             analysis_result = None
             loop = asyncio.new_event_loop()
             asyncio.set_event_loop(loop)
             
             try:
-                if analysis_type == 'validation':
+                # Detect if this is a P&ID document
+                is_pid_document = any(keyword in filename.lower() for keyword in ['pid', 'p&id', 'p-id', 'piping', 'instrumentation'])
+                
+                if is_pid_document:
+                    # Use advanced P&ID analyzer for P&ID documents
+                    logger.info(f"Using advanced P&ID analyzer for {filename}")
+                    analysis_result = loop.run_until_complete(
+                        get_pid_analyzer().analyze_pid_document(file_data, filename, file_type)
+                    )
+                    analysis_result['classification'] = {
+                        'primary_type': 'P&ID',
+                        'confidence_score': 0.95,
+                        'document_category': 'Engineering Drawing',
+                        'analysis_method': 'Advanced P&ID Analyzer with GPT-4'
+                    }
+                elif analysis_type == 'validation':
                     # Document validation
                     analysis_result = loop.run_until_complete(
                         get_document_validator().validate_document_comprehensive(file_data, filename)
