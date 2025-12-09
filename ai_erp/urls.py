@@ -75,6 +75,11 @@ urlpatterns = [
          ai_views.BulkDocumentProcessingAPI.as_view(), 
          name='bulk_document_processing'),
     
+    # Document Upload with Report Generation
+    path('api/ai/document-upload-report/', 
+         ai_views.DocumentUploadWithReportAPI.as_view(), 
+         name='document_upload_report'),
+    
     # AI Service Status and Health Check
     path('api/ai/service-status/', 
          ai_views.AIServiceStatusAPI.as_view(), 

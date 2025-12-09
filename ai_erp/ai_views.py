@@ -20,6 +20,7 @@ from rest_framework.parsers import MultiPartParser, FileUploadParser
 import time
 
 from .ai_services import get_ai_drawing_analyzer, get_document_classifier, get_document_validator
+from .document_report_service import get_report_generator
 
 logger = logging.getLogger(__name__)
 
@@ -381,3 +382,145 @@ def ai_service_status_legacy(request):
     api_view = AIServiceStatusAPI()
     api_view.request = request
     return api_view.get(request)
+
+
+class DocumentUploadWithReportAPI(APIView, AIServiceMixin):
+    """
+    Complete document upload pipeline with AI analysis and report generation
+    Combines upload, classification, and report generation in one endpoint
+    """
+    
+    permission_classes = [IsAuthenticated]
+    parser_classes = [MultiPartParser, FileUploadParser]
+    
+    def post(self, request):
+        """
+        Upload document, perform AI analysis, and generate comprehensive report
+        
+        Request Parameters:
+            - file: Document file (PDF, DWG, DXF, PNG, JPG, DOCX)
+            - report_format: Report format - "json" (default), "pdf", "html"
+            - analysis_type: Type of analysis - "classification" (default), "validation", "full"
+        """
+        try:
+            # Validate input
+            uploaded_file, error_response = self.validate_file_input(request)
+            if error_response:
+                return error_response
+            
+            # Extract parameters
+            file_data = uploaded_file.read()
+            filename = uploaded_file.name
+            file_type = filename.split('.')[-1].lower() if '.' in filename else 'unknown'
+            file_size = uploaded_file.size
+            report_format = request.data.get('report_format', 'json')
+            analysis_type = request.data.get('analysis_type', 'classification')
+            
+            # Validate file type
+            allowed_types = ['pdf', 'png', 'jpg', 'jpeg', 'dwg', 'dxf', 'docx', 'doc']
+            if file_type not in allowed_types:
+                return JsonResponse({
+                    'success': False,
+                    'error': f'Unsupported file type: {file_type}. Allowed: {", ".join(allowed_types)}',
+                    'timestamp': time.time()
+                }, status=400)
+            
+            # Document information
+            document_info = {
+                'filename': filename,
+                'file_type': file_type.upper(),
+                'file_size': file_size,
+                'upload_date': datetime.now().isoformat(),
+                'uploaded_by': request.user.username if request.user.is_authenticated else 'Anonymous'
+            }
+            
+            # Perform AI analysis
+            analysis_result = None
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            
+            try:
+                if analysis_type == 'validation':
+                    # Document validation
+                    analysis_result = loop.run_until_complete(
+                        get_document_validator().validate_document_comprehensive(file_data, filename)
+                    )
+                elif analysis_type == 'full':
+                    # Full analysis (classification + validation)
+                    classification_result = loop.run_until_complete(
+                        get_document_classifier().classify_and_process_document(file_data, filename, file_type)
+                    )
+                    validation_result = loop.run_until_complete(
+                        get_document_validator().validate_document_comprehensive(file_data, filename)
+                    )
+                    # Merge results
+                    analysis_result = {**classification_result, **validation_result}
+                else:
+                    # Default: Classification only
+                    analysis_result = loop.run_until_complete(
+                        get_document_classifier().classify_and_process_document(file_data, filename, file_type)
+                    )
+            finally:
+                loop.close()
+            
+            if not analysis_result:
+                return JsonResponse({
+                    'success': False,
+                    'error': 'AI analysis failed to produce results',
+                    'timestamp': time.time()
+                }, status=500)
+            
+            # Generate comprehensive report
+            report_generator = get_report_generator()
+            report_result = report_generator.generate_report(
+                document_info=document_info,
+                analysis_result=analysis_result,
+                report_format=report_format
+            )
+            
+            if not report_result.get('success'):
+                return JsonResponse({
+                    'success': False,
+                    'error': f"Report generation failed: {report_result.get('error')}",
+                    'analysis_result': analysis_result,
+                    'timestamp': time.time()
+                }, status=500)
+            
+            # Return complete response
+            response_data = {
+                'success': True,
+                'message': 'Document uploaded, analyzed, and report generated successfully',
+                'document_info': document_info,
+                'analysis_result': analysis_result,
+                'report': report_result,
+                'timestamp': time.time()
+            }
+            
+            # For HTML/PDF, include content directly
+            if report_format == 'html':
+                response_data['html_content'] = report_result.get('html_content')
+            elif report_format == 'pdf':
+                # Return PDF as base64 for download
+                import base64
+                pdf_content = report_result.get('pdf_content')
+                if pdf_content:
+                    response_data['pdf_base64'] = base64.b64encode(pdf_content).decode('utf-8')
+            
+            return JsonResponse(response_data, status=201)
+            
+        except Exception as e:
+            logger.error(f"Document upload with report error: {str(e)}")
+            return JsonResponse({
+                'success': False,
+                'error': str(e),
+                'timestamp': time.time()
+            }, status=500)
+
+
+@csrf_exempt
+@require_http_methods(["POST"])
+def document_upload_with_report_legacy(request):
+    """Legacy function-based view for document upload with report"""
+    api_view = DocumentUploadWithReportAPI()
+    api_view.request = request
+    return api_view.post(request)
