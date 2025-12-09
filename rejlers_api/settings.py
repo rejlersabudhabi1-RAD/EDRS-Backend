@@ -279,6 +279,11 @@ if not DEBUG:
         'https://*.up.railway.app',
     ])
 
+# Exempt API endpoints from CSRF protection for easier integration
+CSRF_EXEMPT_URLS = [
+    r'^api/documents/upload-with-report/$',
+]
+
 # API Configuration
 API_VERSION = config('API_VERSION', default='v1')
 API_TITLE = config('API_TITLE', default='Rejlers API System')

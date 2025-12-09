@@ -388,6 +388,7 @@ def ai_service_status_legacy(request):
     return api_view.get(request)
 
 
+@method_decorator(csrf_exempt, name='dispatch')
 class DocumentUploadWithReportAPI(APIView, AIServiceMixin):
     """
     Complete document upload pipeline with AI analysis and report generation
