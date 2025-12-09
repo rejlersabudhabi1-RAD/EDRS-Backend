@@ -8,8 +8,7 @@ NIXPACKS_PYTHON_VERSION = "3.11"
 [deploy]
 healthcheckPath = "/health/"
 healthcheckTimeout = 120
-restartPolicyType = "on-failure"
-restartPolicyMaxRetries = 3
+restartPolicyType = "always"
 
 [env]
 DJANGO_SETTINGS_MODULE = "rejlers_api.settings"
