@@ -17,7 +17,27 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # Security Configuration
 SECRET_KEY = config('SECRET_KEY', default='django-insecure-change-me')
 DEBUG = config('DEBUG', default=True, cast=bool)
+
+# ALLOWED_HOSTS with Railway support
 ALLOWED_HOSTS = config('ALLOWED_HOSTS', default='localhost,127.0.0.1').split(',')
+
+# Add Railway-specific hosts
+if not DEBUG:
+    ALLOWED_HOSTS.extend([
+        '.railway.app',
+        '.up.railway.app',
+        '*.railway.app',
+        '*.up.railway.app',
+    ])
+    
+# Add custom domains
+FRONTEND_URL = config('FRONTEND_URL', default='http://localhost:3000')
+if FRONTEND_URL:
+    # Extract domain from URL
+    import re
+    frontend_domain = re.sub(r'https?://', '', FRONTEND_URL).split('/')[0]
+    if frontend_domain not in ALLOWED_HOSTS:
+        ALLOWED_HOSTS.append(frontend_domain)
 
 
 # Application definition
@@ -207,8 +227,29 @@ SIMPLE_JWT = {
 
 # CORS Configuration for Frontend Integration
 CORS_ALLOWED_ORIGINS = config('CORS_ALLOWED_ORIGINS', default='http://localhost:3000').split(',')
+
+# Add frontend URL to CORS if not already present
+if FRONTEND_URL and FRONTEND_URL not in CORS_ALLOWED_ORIGINS:
+    CORS_ALLOWED_ORIGINS.append(FRONTEND_URL)
+
+# Add common Vercel patterns for production
+if not DEBUG:
+    vercel_patterns = [
+        'https://edrs-frontend-rejlers.vercel.app',
+        'https://*.vercel.app',
+    ]
+    CORS_ALLOWED_ORIGINS.extend([p for p in vercel_patterns if p not in CORS_ALLOWED_ORIGINS])
+
 CORS_ALLOW_CREDENTIALS = True
 CORS_ALLOW_ALL_ORIGINS = DEBUG  # Only in development
+
+# CSRF Configuration
+CSRF_TRUSTED_ORIGINS = CORS_ALLOWED_ORIGINS.copy()
+if not DEBUG:
+    CSRF_TRUSTED_ORIGINS.extend([
+        'https://*.railway.app',
+        'https://*.up.railway.app',
+    ])
 
 # API Configuration
 API_VERSION = config('API_VERSION', default='v1')
