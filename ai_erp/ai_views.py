@@ -24,6 +24,7 @@ import time
 from .ai_services import get_ai_drawing_analyzer, get_document_classifier, get_document_validator
 from .document_report_service import get_report_generator
 from .pid_analyzer import get_pid_analyzer
+from .rag_cag_service import get_rag_verifier, get_cag_enhancer
 
 logger = logging.getLogger(__name__)
 
@@ -437,8 +438,10 @@ class DocumentUploadWithReportAPI(APIView, AIServiceMixin):
                 'uploaded_by': request.user.username if request.user.is_authenticated else 'Anonymous'
             }
             
-            # Perform AI analysis with enhanced P&ID support
+            # Perform AI analysis with enhanced P&ID support + RAG/CAG verification
             analysis_result = None
+            rag_verification = None
+            cag_enhancement = None
             loop = asyncio.new_event_loop()
             asyncio.set_event_loop(loop)
             
@@ -448,7 +451,7 @@ class DocumentUploadWithReportAPI(APIView, AIServiceMixin):
                 
                 if is_pid_document:
                     # Use advanced P&ID analyzer for P&ID documents
-                    logger.info(f"Using advanced P&ID analyzer for {filename}")
+                    logger.info(f"Using advanced P&ID analyzer with RAG/CAG for {filename}")
                     analysis_result = loop.run_until_complete(
                         get_pid_analyzer().analyze_pid_document(file_data, filename, file_type)
                     )
@@ -456,8 +459,33 @@ class DocumentUploadWithReportAPI(APIView, AIServiceMixin):
                         'primary_type': 'P&ID',
                         'confidence_score': 0.95,
                         'document_category': 'Engineering Drawing',
-                        'analysis_method': 'Advanced P&ID Analyzer with GPT-4'
+                        'analysis_method': 'Advanced P&ID Analyzer with GPT-4 + RAG/CAG'
                     }
+                    
+                    # Apply RAG verification for standards compliance
+                    logger.info("Applying RAG verification for standards compliance...")
+                    rag_verification = loop.run_until_complete(
+                        get_rag_verifier().verify_document_with_rag(
+                            document_content=analysis_result,
+                            document_type='PID',
+                            verification_context={'filename': filename, 'file_type': file_type}
+                        )
+                    )
+                    
+                    # Apply CAG enhancement for contextual insights
+                    logger.info("Applying CAG enhancement for contextual insights...")
+                    cag_enhancement = loop.run_until_complete(
+                        get_cag_enhancer().enhance_analysis_with_context(
+                            base_analysis=analysis_result,
+                            document_type='PID',
+                            enhancement_level='comprehensive'
+                        )
+                    )
+                    
+                    # Merge RAG and CAG results into analysis
+                    analysis_result['rag_verification'] = rag_verification
+                    analysis_result['cag_enhancement'] = cag_enhancement
+                    
                 elif analysis_type == 'validation':
                     # Document validation
                     analysis_result = loop.run_until_complete(
