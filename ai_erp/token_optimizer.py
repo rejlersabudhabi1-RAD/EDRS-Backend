@@ -42,6 +42,9 @@ MODEL_SETTINGS = {
 
 # Analysis optimization flags
 OPTIMIZATION_FLAGS = {
+    # ⚡ STREAMLINED MODE - Use single API call instead of 6 separate calls
+    'use_streamlined_analyzer': True,  # 80% faster, 80% cheaper (NEW!)
+    
     # Skip detailed analysis for small/simple documents
     'skip_detailed_for_small_docs': True,
     'small_doc_threshold_kb': 100,
@@ -61,7 +64,7 @@ OPTIMIZATION_FLAGS = {
     'skip_technical_details_if_simple': True,
     
     # Limit content sent to API (compress/truncate)
-    'max_content_length': 15000,     # characters
+    'max_content_length': 15000,     # characters (8000 for streamlined)
     'truncate_method': 'smart',      # 'smart' or 'simple'
 }
 

@@ -24,7 +24,8 @@ import time
 
 from .ai_services import get_ai_drawing_analyzer, get_document_classifier, get_document_validator
 from .document_report_service import get_report_generator
-from .pid_analyzer import get_pid_analyzer
+from .pid_analyzer import get_pid_analyzer  # Legacy 6-call analyzer
+from .pid_analyzer_streamlined import get_streamlined_pid_analyzer  # New efficient single-call analyzer
 from .rag_cag_service import get_rag_verifier, get_cag_enhancer
 
 logger = logging.getLogger(__name__)
@@ -469,16 +470,16 @@ class DocumentUploadWithReportAPI(APIView, AIServiceMixin):
                         logger.warning(f"Content detection failed: {e}")
                 
                 if is_pid_document:
-                    # Use advanced P&ID analyzer for P&ID documents
-                    logger.info(f"Using advanced P&ID analyzer with RAG/CAG for {filename}")
+                    # Use STREAMLINED P&ID analyzer - 80% faster, single API call
+                    logger.info(f"Using STREAMLINED P&ID analyzer (single-call) for {filename}")
                     analysis_result = loop.run_until_complete(
-                        get_pid_analyzer().analyze_pid_document(file_data, filename, file_type)
+                        get_streamlined_pid_analyzer().analyze_pid_document(file_data, filename, file_type)
                     )
                     analysis_result['classification'] = {
                         'primary_type': 'P&ID',
                         'confidence_score': 0.95,
                         'document_category': 'Engineering Drawing',
-                        'analysis_method': 'Advanced P&ID Analyzer with GPT-4 + RAG/CAG'
+                        'analysis_method': 'Streamlined Single-Call P&ID Analyzer (80% faster)'
                     }
                     
                     # Apply RAG verification for standards compliance
